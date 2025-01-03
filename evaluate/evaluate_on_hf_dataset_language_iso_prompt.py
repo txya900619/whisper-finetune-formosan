@@ -9,6 +9,13 @@ from transformers.models.whisper.english_normalizer import BasicTextNormalizer
 
 import evaluate
 
+EVAL_CONFIG_TO_LANGUAGE = {
+    "阿美": "ami",
+    "賽德克": "sdq",
+    "太魯閣": "trv",
+    "排灣": "pwn",
+}
+
 wer_metric = evaluate.load("wer")
 cer_metric = evaluate.load("cer")
 
@@ -116,6 +123,10 @@ def main(args):
         with torch.no_grad():
             predicted_ids = model.generate(
                 input_features.to("cuda", dtype=torch.bfloat16),
+                prompt_ids=processor.get_prompt_ids(
+                    EVAL_CONFIG_TO_LANGUAGE[args.config],
+                    return_tensors="pt",
+                ).cuda(),
                 language=args.language,
                 task="transcribe",
             )

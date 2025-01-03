@@ -2,6 +2,7 @@ import argparse
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 
+import numpy as np
 import torch
 from datasets import Audio, DatasetDict, concatenate_datasets, load_dataset
 from transformers import (
@@ -15,6 +16,13 @@ from transformers import (
 from transformers.models.whisper.english_normalizer import BasicTextNormalizer
 
 import evaluate
+
+EVAL_CONFIG_TO_LANGUAGE = {
+    "阿美": "ami",
+    "賽德克": "sdq",
+    "太魯閣": "trv",
+    "排灣": "pwn",
+}
 
 #######################     ARGUMENT PARSING        #########################
 
@@ -284,7 +292,7 @@ def load_all_datasets(split):
                     args.train_dataset_text_columns[i], "sentence"
                 )
             dataset = dataset.remove_columns(
-                set(dataset.features.keys()) - set(["audio", "sentence"])
+                set(dataset.features.keys()) - set(["audio", "sentence", "language"])
             )
             combined_dataset.append(dataset)
     elif split == "eval":
@@ -297,8 +305,13 @@ def load_all_datasets(split):
                 dataset = dataset.rename_column(
                     args.eval_dataset_text_columns[i], "sentence"
                 )
+            if "language" not in dataset.column_names:
+                language = EVAL_CONFIG_TO_LANGUAGE[args.eval_dataset_configs[i]]
+                dataset = dataset.map(
+                    lambda x: {"language": language}, num_proc=args.num_proc
+                )
             dataset = dataset.remove_columns(
-                set(dataset.features.keys()) - set(["audio", "sentence"])
+                set(dataset.features.keys()) - set(["audio", "sentence", "language"])
             )
             combined_dataset.append(dataset)
 
@@ -327,6 +340,10 @@ def prepare_dataset(batch):
 
     # encode target text to label ids
     batch["labels"] = processor.tokenizer(transcription).input_ids
+
+    if batch["language"] is not None:
+        prompt = processor.get_prompt_ids(batch["language"])
+        batch["labels"] = np.concat((prompt, batch["labels"]))
     return batch
 
 
